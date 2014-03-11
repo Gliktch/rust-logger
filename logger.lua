@@ -1,34 +1,68 @@
-PLUGIN.Title = "Console Log"
-PLUGIN.Description = "Prints when players chat or join to every connected clients console"
+PLUGIN.Title = "Logger"
+PLUGIN.Description = "Prints chat history, connection/disconnection events, and commands (if admin) to each player's F1 console."
+PLUGIN.Version = "1.2.2"
+PLUGIN.Author = "Gliktch"
 
-function clog( arg )
+function PLUGIN:Init()
+    print(self.Title .. " v" .. self.Version .. ", by " .. self.Author .. ": Loading...")
+end
 
-    local PlayerClientAll = RustFirstPass.PlayerClient.All
+function PLUGIN:PostInit()
+    self.oxminmod = plugins.Find("oxmin")
+    if (self.oxminmod) then
+        self.FLAG_CHATMOD = oxmin.AddFlag("chatmod")
+    end
+    self.flagsmod = plugins.Find("flags")
+end
 
+function PLUGIN:HasFlag(netuser, flag)
+    if (netuser:CanAdmin()) then
+        do return true end
+    elseif ((self.oxminmod ~= nil) and (self.oxminmod:HasFlag(netuser, flag))) then
+        do return true end
+    elseif ((self.flagsmod ~= nil) and (self.flagsmod:HasFlag(netuser, flag))) then
+        do return true end
+    end
+    return false
+end
+
+function clog( msg, name, pass )
+    local command = false
+    if ( msg:sub( 1, 1 ) == "/" ) then
+        command = true
+        print( name .. " ran command " .. msg )
+    end
+    local PlayerClientAll = Rust.PlayerClient.All
     local pclist = PlayerClientAll
     local count = pclist.Count
-
     for i=0, count - 1 do
-            rust.RunClientCommand( PlayerClientAll[i].netuser, "echo " .. arg  )
+        netuser = PlayerClientAll[i].netuser
+        if (command) then
+            if (netuser:CanAdmin()) then
+                rust.RunClientCommand( netuser, "echo " .. name .. " ran command " .. msg  )
+            end
+        else
+            if (pass) then
+                rust.RunClientCommand( netuser, "echo " .. msg  )
+            else
+                rust.RunClientCommand( netuser, "echo " .. name .. ": " .. msg  )
+            end
+        end
     end
-   
 end
 
 function PLUGIN:OnUserConnect( netuser )
-    clog( util.QuoteSafe( netuser.displayName ) .. " has joined the game")
-    print( util.QuoteSafe( netuser.displayName ) .. " has joined the game")
+    local sid = rust.CommunityIDToSteamID( tonumber( rust.GetUserID( netuser ) ) )
+    clog( "User '" .. util.QuoteSafe( netuser.displayName ) .. "' connected with SteamID '" .. sid .. "'", "dummy", true )
 end
 
-function PLUGIN:OnUserDisconnect( netuser )
-    clog( util.QuoteSafe( netuser.displayName ) .. " has left the game")
-    print( util.QuoteSafe( netuser.displayName ) .. " has left the game")
+function PLUGIN:OnUserDisconnect( networkplayer )
+    local netuser = networkplayer:GetLocalData()
+    if (not netuser or netuser:GetType().Name ~= "NetUser") then return end
+    local sid = rust.CommunityIDToSteamID( tonumber( rust.GetUserID( netuser ) ) )
+    clog( "User '" .. util.QuoteSafe( netuser.displayName ) .. "' disconnected with SteamID '" .. sid .. "'", "dummy", true )
 end
 
 function PLUGIN:OnUserChat( netuser, name, msg )
-    if (msg:sub( 1, 1 ) == "/") then
-        return
-    else
-        clog( util.QuoteSafe( netuser.displayName ) .. ": " .. msg)
-        print( util.QuoteSafe( netuser.displayName ) .. ": " .. msg)
-    end
+    clog( msg, name )
 end
